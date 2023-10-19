@@ -332,6 +332,10 @@ func TestOperatorPrecedenceParsing(t *testing.T) {
 		{"3 + 4 * 5 == 3 * 1 + 4 * 5", "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"},
 		{"3 + 4 * 5 == 3 * 1 + 4 * 5", "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"},
 		{"3 + 4 * 5 == 3 * 1 + 4 * 5", "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"},
+		{"true", "true"},
+		{"false", "false"},
+		{"3 > 5 == false", "((3 > 5) == false)"},
+		{"3 < 5 == true", "((3 < 5) == true)"},
 	}
 
 	for _, tt := range tests {
@@ -433,4 +437,53 @@ func testIntegerLiteral(t *testing.T, il ast.Expression, value int64) bool {
 	}
 
 	return true
+}
+
+func TestBooleanExpressions(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected bool
+	}{
+		{"true;", true},
+		{"false;", false},
+	}
+
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		if len(program.Statements) != 1 {
+			t.Fatalf(
+				"program.Statements does not contain 1 statements. got=%d",
+				len(program.Statements),
+			)
+		}
+
+		statement, ok := program.Statements[0].(*ast.ExpressionStatement)
+		if !ok {
+			t.Fatalf(
+				"program.Statements[0] is not ast.ExpressionStatement. got=%T",
+				program.Statements[0],
+			)
+		}
+
+		boolean, ok := statement.Expression.(*ast.Boolean)
+		if !ok {
+			t.Fatalf(
+				"expression not *ast.Boolean. got=%T",
+				statement.Expression,
+			)
+		}
+
+		if boolean.Value != tt.expected {
+			t.Errorf(
+				"boolean.Value not %t. got=%t",
+				tt.expected,
+				boolean.Value,
+			)
+		}
+	}
 }

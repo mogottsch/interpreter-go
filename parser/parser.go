@@ -55,6 +55,9 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.INT, p.parseIntegerLiteral)
 	p.registerPrefix(token.BANG, p.parsePrefixExpression)
 	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
+	p.registerPrefix(token.TRUE, p.parseBooleanExpression)
+	p.registerPrefix(token.FALSE, p.parseBooleanExpression)
+	p.registerPrefix(token.LPAREN, p.parseGroupedExpression)
 
 	p.infixParseFns = make(map[token.TokenType]infixParseFn)
 	p.registerInfix(token.PLUS, p.parseInfixExpression)
@@ -155,10 +158,14 @@ func (p *Parser) parseLetStatement() (*ast.LetStatement, bool) {
 	}
 	p.nextToken()
 
-	// expression := p.parseExpression()
-	for p.curToken.Type != token.SEMICOLON {
-		p.nextToken()
+	expression := p.parseExpression(LOWEST)
+	letStatement.Value = expression
+	p.nextToken()
+
+	if !p.expectCurTokenType(token.SEMICOLON) {
+		return nil, false
 	}
+
 	return letStatement, true
 
 }
@@ -171,9 +178,12 @@ func (p *Parser) parseReturnStatement() (*ast.ReturnStatement, bool) {
 	returnStatement := &ast.ReturnStatement{Token: p.curToken}
 	p.nextToken()
 
-	// expression := p.parseExpression()
-	for p.curToken.Type != token.SEMICOLON {
-		p.nextToken()
+	expression := p.parseExpression(LOWEST)
+	returnStatement.Value = expression
+	p.nextToken()
+
+	if !p.expectCurTokenType(token.SEMICOLON) {
+		return nil, false
 	}
 	return returnStatement, true
 
@@ -199,6 +209,10 @@ func (p *Parser) expectCurTokenType(tt token.TokenType) bool {
 
 func (p *Parser) peekTokenIs(tt token.TokenType) bool {
 	return p.peekToken.Type == tt
+}
+
+func (p *Parser) curTokenIs(tt token.TokenType) bool {
+	return p.curToken.Type == tt
 }
 
 func (p *Parser) parseExpressionStatement() *ast.ExpressionStatement {
@@ -276,6 +290,22 @@ func (p *Parser) parseInfixExpression(left ast.Expression) ast.Expression {
 	precedence := p.curPrecedence()
 	p.nextToken()
 	expression.Right = p.parseExpression(precedence)
+
+	return expression
+}
+
+func (p *Parser) parseBooleanExpression() ast.Expression {
+	return &ast.Boolean{Token: p.curToken, Value: p.curTokenIs(token.TRUE)}
+}
+
+func (p *Parser) parseGroupedExpression() ast.Expression {
+	p.nextToken()
+
+	expression := p.parseExpression(LOWEST)
+
+	if !p.expectCurTokenType(token.RPAREN) {
+		return nil
+	}
 
 	return expression
 }
