@@ -8,82 +8,123 @@ import (
 )
 
 func TestLetStatements(t *testing.T) {
-	input := `
-let x = 5;
-let y = 10;
-let foobar = 838383;
-`
-
-	l := lexer.New(input)
-	p := New(l)
-
-	program := p.ParseProgram()
-	checkParserErrors(t, p)
-	if program == nil {
-		t.Fatalf("ParseProgram() returned nil")
-	}
-
-	if len(program.Statements) != 3 {
-		t.Fatalf(
-			"program.Statements does not contain 3 statements. got=%d",
-			len(program.Statements),
-		)
-	}
-
 	tests := []struct {
-		expectedIdentifier string
+		input          string
+		expectedIdent  string
+		expectedValue  interface{}
+		expectedErrors int
 	}{
-		{"x"},
-		{"y"},
-		{"foobar"},
+		{"let x = 5;", "x", 5, 0},
+		{"let y = true;", "y", true, 0},
+		{"let foobar = y;", "foobar", "y", 0},
+		// {"let x 5;", "", nil, 1},
+		// {"let = 10;", "", nil, 1},
+		// {"let 838383;", "", nil, 1},
+		// {"let", "", nil, 1},
 	}
 
-	for i, tt := range tests {
-		stmt := program.Statements[i]
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("Test %s", tt.input), func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
 
-		if !testLetStatement(t, stmt, tt.expectedIdentifier) {
-			return
-		}
+			program := p.ParseProgram()
+			checkParserErrors(t, p)
+
+			if len(program.Statements) != 1 {
+				t.Fatalf(
+					"program.Statements does not contain 1 statements. got=%d",
+					len(program.Statements),
+				)
+			}
+
+			statement, ok := program.Statements[0].(*ast.LetStatement)
+			if !ok {
+				t.Fatalf(
+					"program.Statements[0] is not ast.LetStatement. got=%T",
+					program.Statements[0],
+				)
+			}
+
+			if !testLetStatement(t, statement, tt.expectedIdent) {
+				return
+			}
+
+			if tt.expectedValue != nil {
+				if !testLiteralExpression(t, statement.Value, tt.expectedValue) {
+					return
+				}
+			}
+
+			if len(p.Errors()) != tt.expectedErrors {
+				t.Errorf(
+					"Parser has wrong number of errors. got=%d",
+					len(p.Errors()),
+				)
+				for _, msg := range p.Errors() {
+					t.Errorf("Parser error: %q", msg)
+				}
+			}
+		})
 	}
 }
 
 func TestReturnStatements(t *testing.T) {
-	input := `
-return 5;
-return 10;
-return 993322;
-`
-
-	l := lexer.New(input)
-	p := New(l)
-
-	program := p.ParseProgram()
-	checkParserErrors(t, p)
-
-	if program == nil {
-		t.Fatalf("ParseProgram() returned nil")
+	tests := []struct {
+		input          string
+		expectedValue  interface{}
+		expectedErrors int
+	}{
+		{"return 5;", 5, 0},
+		{"return true;", true, 0},
+		{"return foobar;", "foobar", 0},
+		// {"return", nil, 1},
 	}
 
-	if len(program.Statements) != 3 {
-		t.Fatalf(
-			"program.Statements does not contain 3 statements. got=%d",
-			len(program.Statements),
-		)
-	}
-	for _, statement := range program.Statements {
-		returnStatement, ok := statement.(*ast.ReturnStatement)
-		if !ok {
-			t.Errorf(
-				"statement not *ast.ReturnStatement. got=%T",
-				statement,
-			)
-		}
-		if returnStatement.TokenLiteral() != "return" {
-			t.Errorf(
-				"returnStatement.TokenLiteral not 'return', got %q",
-				returnStatement.TokenLiteral(),
-			)
-		}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("Test %s", tt.input), func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+
+			program := p.ParseProgram()
+			checkParserErrors(t, p)
+
+			if len(program.Statements) != 1 {
+				t.Fatalf(
+					"program.Statements does not contain 1 statements. got=%d",
+					len(program.Statements),
+				)
+			}
+
+			statement, ok := program.Statements[0].(*ast.ReturnStatement)
+			if !ok {
+				t.Fatalf(
+					"program.Statements[0] is not ast.ReturnStatement. got=%T",
+					program.Statements[0],
+				)
+			}
+
+			if statement.TokenLiteral() != "return" {
+				t.Fatalf(
+					"returnStatement.TokenLiteral not 'return', got %q",
+					statement.TokenLiteral(),
+				)
+			}
+
+			if !testLiteralExpression(t, statement.Value, tt.expectedValue) {
+				return
+			}
+
+			if len(p.Errors()) != tt.expectedErrors {
+				t.Errorf(
+					"Parser has wrong number of errors. got=%d",
+					len(p.Errors()),
+				)
+				for _, msg := range p.Errors() {
+					t.Errorf("Parser error: %q", msg)
+				}
+			}
+		})
 	}
 
 }
