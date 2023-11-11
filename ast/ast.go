@@ -2,6 +2,7 @@ package ast
 
 import (
 	"mogottsch/interpreter-go/token"
+	"strings"
 )
 
 type Node interface {
@@ -157,3 +158,87 @@ type Boolean struct {
 func (b *Boolean) expressionNode()      {}
 func (b *Boolean) TokenLiteral() string { return b.Token.Literal }
 func (b *Boolean) String() string       { return b.Token.Literal }
+
+type IfExpression struct {
+	Token       token.Token
+	Condition   Expression
+	Consequence *BlockStatement
+	Alternative *BlockStatement
+}
+
+func (ie *IfExpression) expressionNode()      {}
+func (ie *IfExpression) TokenLiteral() string { return ie.Token.Literal }
+func (ie *IfExpression) String() string {
+	var out string
+
+	out += "if"
+	out += ie.Condition.String()
+	out += " "
+	out += ie.Consequence.String()
+	if ie.Alternative != nil {
+		out += "else "
+		out += ie.Alternative.String()
+	}
+	return out
+}
+
+type BlockStatement struct {
+	Token      token.Token
+	Statements []Statement
+}
+
+func (bs *BlockStatement) statementNode()       {}
+func (bs *BlockStatement) TokenLiteral() string { return bs.Token.Literal }
+func (bs *BlockStatement) String() string {
+	var out string
+
+	for _, s := range bs.Statements {
+		out += s.String()
+	}
+	return out
+}
+
+type FunctionLiteral struct {
+	Token      token.Token
+	Parameters []*Identifier
+	Body       *BlockStatement
+}
+
+func (fl *FunctionLiteral) expressionNode()      {}
+func (fl *FunctionLiteral) TokenLiteral() string { return fl.Token.Literal }
+func (fl *FunctionLiteral) String() string {
+	var out string
+
+	params := []string{}
+	for _, p := range fl.Parameters {
+		params = append(params, p.String())
+	}
+	out += fl.TokenLiteral()
+	out += "("
+	out += strings.Join(params, ", ")
+	out += ")"
+	out += fl.Body.String()
+	return out
+}
+
+type CallExpression struct {
+	Token     token.Token
+	Function  Expression
+	Arguments []Expression
+}
+
+func (ce *CallExpression) expressionNode()      {}
+func (ce *CallExpression) TokenLiteral() string { return ce.Token.Literal }
+func (ce *CallExpression) String() string {
+	var out string
+
+	args := []string{}
+	for _, a := range ce.Arguments {
+		args = append(args, a.String())
+	}
+	out += ce.Function.String()
+	out += "("
+	out += strings.Join(args, ", ")
+	out += ")"
+	return out
+}

@@ -28,6 +28,7 @@ var precedences = map[token.TokenType]int{
 	token.MINUS:    SUM,
 	token.SLASH:    PRODUCT,
 	token.ASTERISK: PRODUCT,
+	token.LPAREN:   CALL,
 }
 
 type (
@@ -58,6 +59,8 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.TRUE, p.parseBooleanExpression)
 	p.registerPrefix(token.FALSE, p.parseBooleanExpression)
 	p.registerPrefix(token.LPAREN, p.parseGroupedExpression)
+	p.registerPrefix(token.IF, p.parseIfExpression)
+	p.registerPrefix(token.FUNCTION, p.parseFunctionLiteral)
 
 	p.infixParseFns = make(map[token.TokenType]infixParseFn)
 	p.registerInfix(token.PLUS, p.parseInfixExpression)
@@ -68,6 +71,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.NOT_EQ, p.parseInfixExpression)
 	p.registerInfix(token.LT, p.parseInfixExpression)
 	p.registerInfix(token.GT, p.parseInfixExpression)
+	p.registerInfix(token.LPAREN, p.parseCallExpression)
 
 	// Read two tokens, so curToken and peekToken are both set
 
@@ -207,6 +211,15 @@ func (p *Parser) expectCurTokenType(tt token.TokenType) bool {
 
 }
 
+func (p *Parser) expectPeekTokenType(tt token.TokenType) bool {
+	if p.peekToken.Type != tt {
+		p.addTokenTypeError(tt)
+		return false
+	}
+	p.nextToken()
+	return true
+}
+
 func (p *Parser) peekTokenIs(tt token.TokenType) bool {
 	return p.peekToken.Type == tt
 }
@@ -303,9 +316,143 @@ func (p *Parser) parseGroupedExpression() ast.Expression {
 
 	expression := p.parseExpression(LOWEST)
 
-	if !p.expectCurTokenType(token.RPAREN) {
+	if !p.expectPeekTokenType(token.RPAREN) {
 		return nil
 	}
 
 	return expression
+}
+
+func (p *Parser) parseIfExpression() ast.Expression {
+	expression := &ast.IfExpression{Token: p.curToken}
+
+	p.nextToken()
+	if !p.expectCurTokenType(token.LPAREN) {
+		return nil
+	}
+
+	p.nextToken()
+	expression.Condition = p.parseExpression(LOWEST)
+
+	if !p.expectPeekTokenType(token.RPAREN) {
+		return nil
+	}
+
+	if !p.expectPeekTokenType(token.LBRACE) {
+		return nil
+	}
+
+	expression.Consequence = p.parseBlockStatement()
+
+	if p.peekTokenIs(token.ELSE) {
+		p.nextToken()
+
+		if !p.expectPeekTokenType(token.LBRACE) {
+			return nil
+		}
+
+		expression.Alternative = p.parseBlockStatement()
+	}
+
+	return expression
+}
+
+func (p *Parser) parseBlockStatement() *ast.BlockStatement {
+	block := &ast.BlockStatement{Token: p.curToken}
+
+	block.Statements = []ast.Statement{}
+
+	p.nextToken()
+
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		statement, ok := p.parseStatement()
+		if ok {
+			block.Statements = append(block.Statements, statement)
+		}
+		p.nextToken()
+	}
+
+	return block
+}
+
+func (p *Parser) parseFunctionLiteral() ast.Expression {
+	function := &ast.FunctionLiteral{Token: p.curToken}
+	p.nextToken()
+
+	if !p.expectCurTokenType(token.LPAREN) {
+		return nil
+	}
+
+	function.Parameters = p.parseFunctionParameters()
+	if !p.expectCurTokenType(token.LBRACE) {
+		return nil
+	}
+
+	function.Body = p.parseBlockStatement()
+
+	return function
+}
+
+func (p *Parser) parseFunctionParameters() []*ast.Identifier {
+	identifiers := []*ast.Identifier{}
+
+	if p.peekTokenIs(token.RPAREN) {
+		p.nextToken()
+		p.nextToken()
+		return identifiers
+	}
+
+	p.nextToken()
+
+	identifier := p.parseIdentifier()
+	identifiers = append(identifiers, identifier)
+
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken()
+		p.nextToken()
+		identifier := p.parseIdentifier()
+		identifiers = append(identifiers, identifier)
+	}
+
+	if !p.expectPeekTokenType(token.RPAREN) {
+		return nil
+	}
+	p.nextToken()
+
+	return identifiers
+}
+
+func (p *Parser) parseCallExpression(function ast.Expression) ast.Expression {
+	expression := &ast.CallExpression{Token: p.curToken, Function: function}
+	expression.Arguments = p.parseCallArguments()
+
+	return expression
+}
+
+func (p *Parser) parseCallArguments() []ast.Expression {
+	arguments := []ast.Expression{}
+
+	if p.peekTokenIs(token.RPAREN) {
+		p.nextToken()
+		p.nextToken()
+		return arguments
+	}
+
+	p.nextToken()
+
+	argument := p.parseExpression(LOWEST)
+	arguments = append(arguments, argument)
+
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken()
+		p.nextToken()
+		argument = p.parseExpression(LOWEST)
+		arguments = append(arguments, argument)
+	}
+
+	if !p.expectPeekTokenType(token.RPAREN) {
+		return nil
+	}
+
+	return arguments
 }
